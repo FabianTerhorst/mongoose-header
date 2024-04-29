@@ -10916,13 +10916,38 @@ size_t mg_tls_pending(struct mg_connection *c) {
   return tls == NULL ? 0 : mbedtls_ssl_get_bytes_avail(&tls->ssl);
 }
 
-long mg_tls_recv(struct mg_connection *c, void *buf, size_t len) {
+/*long mg_tls_recv(struct mg_connection *c, void *buf, size_t len) {
   struct mg_tls *tls = (struct mg_tls *) c->tls;
   long n = mbedtls_ssl_read(&tls->ssl, (unsigned char *) buf, len);
   if (n == MBEDTLS_ERR_SSL_WANT_READ || n == MBEDTLS_ERR_SSL_WANT_WRITE)
     return MG_IO_WAIT;
   if (n <= 0) return MG_IO_ERR;
   return n;
+}*/
+
+//TODO: test
+long mg_tls_recv(struct mg_connection *c, void *buf, size_t len) {
+  struct mg_tls *tls = (struct mg_tls *) c->tls;
+  size_t total_read = 0;
+
+  while (total_read < len) {
+    long n = mbedtls_ssl_read(&tls->ssl, buf + total_read, len - total_read);
+    if(n > 0) {
+      total_read += (size_t) n;
+    } else if (n == MBEDTLS_ERR_SSL_WANT_READ || n == MBEDTLS_ERR_SSL_WANT_WRITE) {
+      if(total_read == 0) {
+        return MG_IO_WAIT;
+      }
+      return (long) total_read;
+    } else {
+      if(total_read == 0) {
+        return MG_IO_ERR;
+      }
+      return (long) total_read;
+    }
+  }
+  // oops we filled the entire buffer; unread data may still remain!
+  return (long) total_read;
 }
 
 long mg_tls_send(struct mg_connection *c, const void *buf, size_t len) {
